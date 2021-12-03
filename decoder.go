@@ -10,26 +10,8 @@ import (
 	"io"
 )
 
-const (
-	Magic = "qoif"
-
-	QOI_INDEX   = 0x00 // 00xxxxxx
-	QOI_RUN_8   = 0x40 // 010xxxxx
-	QOI_RUN_16  = 0x60 // 011xxxxx
-	QOI_DIFF_8  = 0x80 // 10xxxxxx
-	QOI_DIFF_16 = 0xc0 // 110xxxxx
-	QOI_DIFF_24 = 0xe0 // 1110xxxx
-	QOI_COLOR   = 0xf0 // 1111xxxx
-
-	QOI_MASK_2 = 0xc0 // 11000000
-	QOI_MASK_3 = 0xe0 // 11100000
-	QOI_MASK_4 = 0xf0 // 11110000
-)
-
 var (
 	ErrBadMagic = errors.New("bad magic value")
-
-	transparent = color.NRGBA{0, 0, 0, 255}
 )
 
 func init() {
@@ -56,11 +38,7 @@ func Decode(r io.Reader) (image.Image, error) {
 }
 
 func DecodeConfig(r io.Reader) (cfg image.Config, err error) {
-	var desc struct {
-		Magic                [4]byte
-		Width, Height        uint32
-		Channels, Colorspace uint8
-	}
+	var desc desc
 	if err = binary.Read(r, binary.BigEndian, &desc); err != nil {
 		return
 	}
@@ -186,7 +164,7 @@ func (p *Decoder) Next() bool {
 		}
 	}
 
-	p.seen[(p.cur.R^p.cur.G^p.cur.B^p.cur.A)%64] = p.cur
+	p.seen[hash(p.cur)] = p.cur
 	return true
 }
 
