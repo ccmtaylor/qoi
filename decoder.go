@@ -11,6 +11,8 @@ import (
 )
 
 const (
+	Magic = "qoif"
+
 	QOI_INDEX   = 0x00 // 00xxxxxx
 	QOI_RUN_8   = 0x40 // 010xxxxx
 	QOI_RUN_16  = 0x60 // 011xxxxx
@@ -31,7 +33,7 @@ var (
 )
 
 func init() {
-	image.RegisterFormat("qoi", "qoif", Decode, DecodeConfig)
+	image.RegisterFormat("qoi", Magic, Decode, DecodeConfig)
 }
 
 func Decode(r io.Reader) (image.Image, error) {
@@ -63,7 +65,7 @@ func DecodeConfig(r io.Reader) (cfg image.Config, err error) {
 		return
 	}
 
-	if string(desc.Magic[:]) != "qoif" {
+	if string(desc.Magic[:]) != Magic {
 		return cfg, ErrBadMagic
 	}
 	if desc.Channels < 3 || desc.Channels > 4 {
