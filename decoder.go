@@ -35,12 +35,12 @@ func init() {
 }
 
 func Decode(r io.Reader) (image.Image, error) {
-	desc, err := readDesc(r)
+	cfg, err := DecodeConfig(r)
 	if err != nil {
 		return nil, err
 	}
-	img := image.NewNRGBA(image.Rect(0, 0, int(desc.Width), int(desc.Height)))
-	p := NewDecoder(r)
+	img := image.NewNRGBA(image.Rect(0, 0, cfg.Width, cfg.Height))
+	p := NewDecoder(cfg, r)
 	for p.Next() {
 		c := p.Current()
 		img.Pix = append(img.Pix, c.R, c.G, c.B, c.A)
@@ -51,36 +51,25 @@ func Decode(r io.Reader) (image.Image, error) {
 	return img, p.Err()
 }
 
-func DecodeConfig(r io.Reader) (image.Config, error) {
-	desc, err := readDesc(r)
-	if err != nil {
-		return image.Config{}, err
+func DecodeConfig(r io.Reader) (cfg image.Config, err error) {
+	var desc struct {
+		Magic                [4]byte
+		Width, Height        uint32
+		Channels, Colorspace uint8
 	}
-	return image.Config{
-		ColorModel: color.NRGBAModel,
-		Width:      int(desc.Width),
-		Height:     int(desc.Height),
-	}, nil
-}
-
-type desc struct {
-	Magic                [4]byte
-	Width, Height        uint32
-	Channels, Colorspace uint8
-}
-
-func readDesc(r io.Reader) (desc desc, err error) {
-	err = binary.Read(r, binary.BigEndian, &desc)
-	if err != nil {
+	if err = binary.Read(r, binary.BigEndian, &desc); err != nil {
 		return
 	}
+
 	if string(desc.Magic[:]) != "qoif" {
-		return desc, ErrBadMagic
+		return cfg, ErrBadMagic
 	}
-	// if desc.Width == 0 || desc.Height == 0 {}
 	if desc.Channels < 3 || desc.Channels > 4 {
-		return desc, fmt.Errorf("bad channels: %d", desc.Channels)
+		return cfg, fmt.Errorf("bad channels: %d", desc.Channels)
 	}
+	cfg.ColorModel = color.NRGBAModel
+	cfg.Width = int(desc.Width)
+	cfg.Height = int(desc.Height)
 	return
 }
 
@@ -88,35 +77,41 @@ type Decoder struct {
 	r   *bufio.Reader
 	cur color.NRGBA
 
-	seen [64]color.NRGBA
-	run  int
+	remaining uint64
+	seen      [64]color.NRGBA
+	run       int
 
 	err error
 }
 
-func NewDecoder(r io.Reader) *Decoder {
+func NewDecoder(cfg image.Config, r io.Reader) *Decoder {
 	return &Decoder{
-		r:   bufio.NewReader(r),
-		cur: transparent,
+		r:         bufio.NewReader(r),
+		cur:       transparent,
+		remaining: uint64(cfg.Width * cfg.Height),
 	}
 }
 
 func (p *Decoder) read8() (b byte, ok bool) {
 	b, p.err = p.r.ReadByte()
+	if p.err != nil {
+		p.remaining = 0
+	}
 	return b, p.err == nil
 }
 
 func (p *Decoder) Next() bool {
+	if p.err != nil || p.remaining == 0 {
+		return false
+	}
+
+	p.remaining--
+
 	// we're in a run of consecutive identical pixels; no need to read more data
 	if p.run > 0 {
 		p.run--
 		return true
 	}
-
-	if p.err != nil {
-		return false
-	}
-
 	b1, ok := p.read8()
 	if !ok {
 		return false
