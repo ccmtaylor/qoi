@@ -40,6 +40,8 @@ func Decode(r io.Reader) (image.Image, error) {
 		return nil, err
 	}
 	img := image.NewNRGBA(image.Rect(0, 0, cfg.Width, cfg.Height))
+	// reset length so we can append with impunity
+	img.Pix = img.Pix[:0]
 	p := NewDecoder(cfg, r)
 	for p.Next() {
 		c := p.Current()
